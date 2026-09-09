@@ -1,3 +1,11 @@
+def is_tensorflow_available():
+    try:
+        import tensorflow as tf
+        return True
+    except Exception:
+        return False
+
+
 """Keras image inference service for the integrated Streamlit app."""
 
 import io

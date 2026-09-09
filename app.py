@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, f1_score
 
-from image_module.service import load_models, predict as predict_image
+from image_module.service import load_models, predict as predict_image, is_tensorflow_available
 from uv_module.core.audit import init_db, log_batch_results, get_audit_history
 from uv_module.core.router import route_and_process
 
@@ -88,7 +88,10 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 @st.cache_resource(show_spinner='Loading image deep learning models...')
 def get_image_models():
-    return load_models(IMAGE_MODELS_DIR)
+    try:
+        return load_models(IMAGE_MODELS_DIR)
+    except Exception:
+        return None
 
 
 def plot_confusion_matrix_fig(y_true, y_pred, labels=None, title='Confusion Matrix'):
@@ -568,8 +571,18 @@ def render_retraining_page():
 
 
 def render_image_page():
-    st.markdown('##  Deep Learning Image Analysis')
+    st.markdown('## Deep Learning Image Analysis')
     st.write('Upload plant species images or take a live photo for MobileNetV2 image classification.')
+
+    if not is_tensorflow_available():
+        st.warning('TensorFlow module is not installed on this server environment.')
+        st.info('To enable deep learning image classification on Streamlit Cloud, ensure tensorflow-cpu is in requirements.txt.')
+        return
+
+    models = get_image_models()
+    if models is None:
+        st.error('Could not load Keras image classification models.')
+        return
 
     col1, col2 = st.columns([1, 1], gap='large')
     with col1:
@@ -581,9 +594,9 @@ def render_image_page():
         if image_source is not None:
             image_bytes = image_source.getvalue()
             st.image(image_bytes, caption='Selected Image', width=340)
-            if st.button(' Run Image Analysis', type='primary', use_container_width=True):
+            if st.button('Run Image Analysis', type='primary', use_container_width=True):
                 try:
-                    result = predict_image(image_bytes, get_image_models())
+                    result = predict_image(image_bytes, models)
                     st.success(f"Detected Plant: **{result['plant_label']}**")
                     st.metric('Plant Detection Confidence', f"{result['plant_confidence']:.2f}%")
                     
