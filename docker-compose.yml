@@ -1,0 +1,18 @@
+﻿version: '3.8'
+
+services:
+  plant-suite-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plant_suite_app
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    volumes:
+      # Mount model storage and database so custom trained models & audit logs persist across container restarts
+      - ./uv_module/models:/app/uv_module/models
+      - ./uv_module/models_backup:/app/uv_module/models_backup
+      - ./uv_module/core:/app/uv_module/core
+    environment:
+      - PYTHONUNBUFFERED=1
