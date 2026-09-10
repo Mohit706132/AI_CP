@@ -1,5 +1,3 @@
-import socket
-import qrcode
 import io
 # -*- coding: utf-8 -*-
 from pathlib import Path
@@ -14,7 +12,14 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, f1_score
 
 from image_module.service import load_models, predict as predict_image, is_tensorflow_available
-from uv_module.core.audit import init_db, log_batch_results, get_audit_history
+from uv_module.core.audit import init_db, log_batch_results, log_image_result, get_audit_history
+import importlib
+import uv_module.core.auth
+importlib.reload(uv_module.core.auth)
+from uv_module.core.auth import (
+    verify_login, register_user, get_pending_users, approve_user,
+    reject_user, update_user_role, get_all_users, delete_user
+)
 from uv_module.core.router import route_and_process
 
 from training_scripts.train_hirda import train_hirda_model
@@ -41,48 +46,121 @@ st.set_page_config(
 
 init_db()
 
-CUSTOM_CSS = '''
+CUSTOM_CSS = """
 <style>
-    @import url('https://fonts.googleapis.com/css2family=Outfit:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     
     .stApp {
-        background: linear-gradient(135deg, #0b1329 0%, #0f172a 50%, #1e1b4b 100%);
-        color: #f8fafc;
+        background: radial-gradient(circle at 10% 20%, #0d1b2a 0%, #080d16 90%);
+        color: #f1f5f9;
     }
     
-    .glass-card {
-        background: rgba(30, 41, 59, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 24px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    /* Header & Branding */
+    .brand-title {
+        font-size: 2.2rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #60a5fa 0%, #34d399 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.2rem;
     }
     
-    .stButton>button {
-        border-radius: 10px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+    .brand-sub {
+        color: #94a3b8;
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
     }
     
+    /* Glassmorphic Cards */
+    .app-card {
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+    }
+    
+    /* Mobile responsive adjustments */
+    @media (max-width: 768px) {
+        .brand-title {
+            font-size: 1.6rem !important;
+        }
+        .app-card {
+            padding: 14px !important;
+        }
+        .stMetric {
+            padding: 10px !important;
+        }
+    }
+    
+    /* Custom Metric Styling */
+    div[data-testid="stMetricValue"] {
+        font-size: 1.7rem !important;
+        font-weight: 700 !important;
+        color: #f8fafc !important;
+    }
+    
+    /* Buttons */
     .stButton>button[data-baseweb="button"][kind="primary"] {
-        background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        font-weight: 600;
+        border-radius: 10px;
         border: none;
-        box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
+        padding: 0.55rem 1.2rem;
+        box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.35);
+        transition: all 0.2s ease;
     }
     
     .stButton>button[data-baseweb="button"][kind="primary"]:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.55);
+        box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.5);
+    }
+    
+    .stButton>button[data-baseweb="button"][kind="secondary"] {
+        background: rgba(30, 41, 59, 0.6);
+        color: #e2e8f0;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        transition: all 0.2s ease;
+    }
+    
+    .stButton>button[data-baseweb="button"][kind="secondary"]:hover {
+        background: rgba(51, 65, 85, 0.8);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    /* Badges */
+    .badge-admin {
+        display: inline-block;
+        background: rgba(59, 130, 246, 0.15);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    
+    .badge-user {
+        display: inline-block;
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
     }
 </style>
-'''
+"""
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
@@ -182,65 +260,127 @@ def find_ground_truth_column(df):
     return None
 
 
-def get_local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return '127.0.0.1'
+def render_auth_page():
+    st.markdown('<div style="text-align: center; margin-top: 20px; margin-bottom: 25px;">'
+                '<h1 style="color: #60a5fa; margin-bottom: 0;">🌿 Integrated Plant Authentication Suite</h1>'
+                '<p style="color: #94a3b8; font-size: 1.1rem;">Botanical Intelligence, Spectral Verification & Deep Learning</p>'
+                '</div>', unsafe_allow_html=True)
 
+    c_left, c_mid, c_right = st.columns([1, 1.4, 1])
+    with c_mid:
+        auth_mode = st.radio("Access Portal", ["🔑 Login", "📝 Register New Account"], horizontal=True, label_visibility="collapsed")
+        
+        if auth_mode == "🔑 Login":
+            st.markdown("### User Sign In")
+            st.write("Enter your credentials to access the Plant Authentication Suite.")
+            
+            with st.form("login_form"):
+                username = st.text_input("Username").strip()
+                password = st.text_input("Password", type="password")
+                submit_login = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+                
+                if submit_login:
+                    if not username or not password:
+                        st.error("Please enter both username and password.")
+                    else:
+                        ok, msg, user_dict = verify_login(username, password)
+                        if ok and user_dict:
+                            st.session_state["authenticated"] = True
+                            st.session_state["user"] = user_dict
+                            st.success(f"Welcome back, {user_dict.get('full_name', username)}!")
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                            
+        else:
+            st.markdown("### Request System Access")
+            st.write("Submit your registration. An Administrator will review and approve your account.")
+            
+            with st.form("register_form"):
+                reg_name = st.text_input("Full Name").strip()
+                reg_user = st.text_input("Desired Username").strip()
+                reg_pass = st.text_input("Password", type="password")
+                reg_pass2 = st.text_input("Confirm Password", type="password")
+                submit_reg = st.form_submit_button("Submit Access Request", type="primary", use_container_width=True)
+                
+                if submit_reg:
+                    if not reg_user or not reg_pass:
+                        st.error("Username and password are required.")
+                    elif reg_pass != reg_pass2:
+                        st.error("Passwords do not match.")
+                    else:
+                        ok, msg = register_user(reg_user, reg_pass, reg_name)
+                        if ok:
+                            st.success(msg)
+                            st.info("Once approved by the Administrator, you will be able to log in.")
+                        else:
+                            st.error(msg)
 
-def render_mobile_qr_widget():
-    local_ip = get_local_ip()
-    url = f"http://{local_ip}:8501"
-    
-    with st.sidebar.expander("📱 Mobile & Network Access", expanded=False):
-        st.markdown("**Scan to open on phone:**")
-        try:
-            qr = qrcode.QRCode(version=1, box_size=4, border=2)
-            qr.add_data(url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            st.image(buf.getvalue(), use_container_width=True)
-        except Exception as e:
-            st.caption(f"QR Error: {e}")
-            
-        st.markdown("**Wi-Fi Mobile URL:**")
-        st.code(url, language="text")
-        st.caption("Ensure your phone is connected to the same Wi-Fi network.")
 
 
 def render_sidebar():
+    user = st.session_state.get("user", {})
+    role = user.get("role", "user")
+    username = user.get("username", "User")
+    full_name = user.get("full_name", username)
+
     with st.sidebar:
-        st.markdown('#  Plant Suite')
-        st.markdown('**B.V. Bhide Foundation**')
-        st.caption('Spectral & Computer Vision Intelligence')
-        st.markdown('---')
+        st.markdown("<div style='display: flex; align-items: center; gap: 10px; margin-bottom: 5px;'>"
+                    "<span style='font-size: 1.8rem;'>🌿</span>"
+                    "<div><h2 style='margin:0; font-size: 1.3rem; font-weight: 700; color: #f8fafc;'>Plant Suite</h2>"
+                    "<span style='color: #64748b; font-size: 0.75rem; font-weight: 500;'>B.V. Bhide Foundation</span></div>"
+                    "</div>", unsafe_allow_html=True)
+        st.caption("Spectral AI & Computer Vision")
+        st.markdown("---")
+        
+        # User profile badge
+        st.markdown(f"**{full_name}** (`@{username}`)")
+        if role == "admin":
+            st.markdown("<span class='badge-admin'>👑 Administrator</span>", unsafe_allow_html=True)
+        else:
+            st.markdown("<span class='badge-user'>🔬 Research User</span>", unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("🚪 Sign Out", use_container_width=True):
+            st.session_state["authenticated"] = False
+            st.session_state["user"] = None
+            st.rerun()
+
+        st.markdown("---")
+
+        # RBAC Navigation
+        if role == "admin":
+            nav_options = [
+                "UV Spectral Analysis",
+                "Image Analysis",
+                "Model Retraining",
+                "Audit Logs",
+                "User Management & Approvals"
+            ]
+            format_dict = {
+                "UV Spectral Analysis": "🔬 UV Spectral Scan",
+                "Image Analysis": "📸 Plant Image Scan",
+                "Model Retraining": "⚙️ Model Retraining",
+                "Audit Logs": "📜 Security Audit Logs",
+                "User Management & Approvals": "👥 User Management"
+            }
+        else:
+            nav_options = [
+                "UV Spectral Analysis",
+                "Image Analysis"
+            ]
+            format_dict = {
+                "UV Spectral Analysis": "🔬 UV Spectral Scan",
+                "Image Analysis": "📸 Plant Image Scan"
+            }
+
         page = st.radio(
-            'Navigation',
-            [
-                'UV Spectral Analysis',
-                'Model Retraining',
-                'Image Analysis',
-                'Audit Logs',
-            ],
-            format_func=lambda x: {
-                'UV Spectral Analysis': ' UV Spectral Analysis',
-                'Model Retraining': ' Model Retraining',
-                'Image Analysis': ' Image Analysis',
-                'Audit Logs': ' Audit Logs'
-            }[x]
+            "Navigation Menu",
+            nav_options,
+            format_func=lambda x: format_dict[x]
         )
-        st.markdown('---')
-        render_mobile_qr_widget()
-        st.caption('B.V. Bhide Foundation 2026')
-        st.caption('')
+        st.markdown("---")
+        st.caption("B.V. Bhide Foundation © 2026")
     return page
 
 
@@ -316,7 +456,8 @@ def render_uv_page():
                     results, modality = route_and_process(
                         uploaded_file, UV_MODELS_DIR, UV_DATA_DIR, target_plant
                     )
-                    log_batch_results('integrated-user', target_plant, results)
+                    active_user = st.session_state.get("user", {}).get("username", "user")
+                    log_batch_results(active_user, target_plant, results)
                     
                     for idx, res in enumerate(results):
                         all_results.append(res)
@@ -597,6 +738,8 @@ def render_image_page():
             if st.button('Run Image Analysis', type='primary', use_container_width=True):
                 try:
                     result = predict_image(image_bytes, models)
+                    active_user = st.session_state.get("user", {}).get("username", "user")
+                    log_image_result(active_user, image_name, result)
                     st.success(f"Detected Plant: **{result['plant_label']}**")
                     st.metric('Plant Detection Confidence', f"{result['plant_confidence']:.2f}%")
                     
@@ -645,16 +788,97 @@ def render_audit_page():
         st.error(f'Could not fetch audit logs: {e}')
 
 
+def render_user_management_page():
+    active_admin = st.session_state.get("user", {}).get("username", "admin")
+    st.markdown("<div class='brand-title'>👥 User Access & Role Administration</div>", unsafe_allow_html=True)
+    st.markdown("<div class='brand-sub'>Approve new user registrations, promote operators to Administrator, or revoke access.</div>", unsafe_allow_html=True)
+
+    all_users = get_all_users()
+    pending_users = get_pending_users()
+    approved_users = [u for u in all_users if u["status"] == "approved"]
+    admin_users = [u for u in all_users if u["role"] == "admin"]
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Total Users", len(all_users))
+    with m2:
+        st.metric("Pending Approvals", len(pending_users), delta=f"{len(pending_users)} pending" if pending_users else None)
+    with m3:
+        st.metric("Approved Users", len(approved_users))
+    with m4:
+        st.metric("Active Admins", len(admin_users))
+
+    st.markdown("---")
+    
+    tab_pend, tab_roles, tab_all = st.tabs(["⏳ Pending Approvals", "👑 Role Assignment & Promotion", "📋 All User Accounts"])
+
+    with tab_pend:
+        st.markdown("### ⏳ Pending Registration Requests")
+        if pending_users:
+            for u in pending_users:
+                with st.container():
+                    c_info, c_app, c_rej = st.columns([3, 1, 1], gap="small")
+                    with c_info:
+                        st.markdown(f"**{u.get('full_name', u['username'])}** (`@{u['username']}`)")
+                        st.caption(f"Registered: `{u['created_at']}` | Requested Role: `{u['role']}`")
+                    with c_app:
+                        if st.button("✅ Approve", key=f"app_{u['username']}", type="primary", use_container_width=True):
+                            approve_user(u["username"], active_admin)
+                            st.success(f"Approved @{u['username']}")
+                            st.rerun()
+                    with c_rej:
+                        if st.button("❌ Reject", key=f"rej_{u['username']}", use_container_width=True):
+                            reject_user(u["username"])
+                            st.warning(f"Rejected @{u['username']}")
+                            st.rerun()
+                    st.markdown("<hr style='margin: 8px 0; border: 0.5px solid rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+        else:
+            st.info("✅ No pending user registration requests. All accounts have been reviewed.")
+
+    with tab_roles:
+        st.markdown("### 👑 Promote User to Administrator")
+        st.write("Grant administrative privileges (Model Retraining, Audit Logs, User Approvals) to any approved user.")
+        
+        non_admin_users = [u for u in all_users if u["status"] == "approved" and u["username"] != "admin"]
+        if non_admin_users:
+            c_select, c_role, c_btn = st.columns([2, 1.5, 1], gap="medium")
+            with c_select:
+                user_options = {u["username"]: f"{u.get('full_name', u['username'])} (@{u['username']}) - Currently: {u['role'].upper()}" for u in non_admin_users}
+                target_user = st.selectbox("Select User Account", list(user_options.keys()), format_func=lambda x: user_options[x])
+            with c_role:
+                new_role = st.selectbox("Assign Role", ["admin", "user"], format_func=lambda x: "👑 Administrator (Full Control)" if x == "admin" else "🔬 Research User (Scan Only)")
+            with c_btn:
+                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("Update Role", type="primary", use_container_width=True):
+                    update_user_role(target_user, new_role)
+                    st.success(f"Successfully updated @{target_user} to {new_role.upper()}!")
+                    st.rerun()
+        else:
+            st.info("No candidate users available for role modification.")
+
+    with tab_all:
+        st.markdown("### 📋 All Registered Users Directory")
+        if all_users:
+            df_users = pd.DataFrame(all_users)
+            display_cols = [c for c in ["id", "username", "full_name", "role", "status", "created_at", "approved_by", "last_login"] if c in df_users.columns]
+            st.dataframe(df_users[display_cols], use_container_width=True, hide_index=True)
+
+
 def main():
-    page = render_sidebar()
-    if page == 'UV Spectral Analysis':
-        render_uv_page()
-    elif page == 'Model Retraining':
-        render_retraining_page()
-    elif page == 'Image Analysis':
-        render_image_page()
-    elif page == 'Audit Logs':
-        render_audit_page()
+    if not st.session_state.get("authenticated", False):
+        render_auth_page()
+    else:
+        page = render_sidebar()
+        if page == "UV Spectral Analysis":
+            render_uv_page()
+        elif page == "Model Retraining":
+            render_retraining_page()
+        elif page == "Image Analysis":
+            render_image_page()
+        elif page == "Audit Logs":
+            render_audit_page()
+        elif page == "User Management & Approvals":
+            render_user_management_page()
 
 if __name__ == '__main__':
     main()

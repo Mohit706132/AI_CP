@@ -1,7 +1,8 @@
-import sqlite3
+﻿import sqlite3
 from datetime import datetime
 from pathlib import Path
 import json
+from .auth import init_auth_db
 
 DB_PATH = Path(__file__).resolve().parent.parent / "audit.db"
 
@@ -24,6 +25,9 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+    
+    # Initialize users table & default admin
+    init_auth_db()
 
 def log_result(username, module, result_dict):
     conn = sqlite3.connect(DB_PATH)
@@ -41,6 +45,27 @@ def log_result(username, module, result_dict):
         result_dict.get('purity', 0.0),
         json.dumps(result_dict.get('confidence', {})),
         result_dict.get('modality', 'Unknown')
+    ))
+    conn.commit()
+    conn.close()
+
+def log_image_result(username, image_name, result_dict):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    top = result_dict.get('top_prediction', {})
+    c.execute('''
+        INSERT INTO audit_log (timestamp, username, module, sample_name, prediction, status, purity, confidence_json, modality)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        username,
+        "Image Classification (MobileNetV2)",
+        image_name,
+        f"{result_dict.get('plant_label', 'Unknown')} - {top.get('name', 'Unknown')}",
+        "PROCESSED",
+        float(top.get('confidence', 0.0)),
+        json.dumps(result_dict.get('alternatives', [])),
+        "IMAGE"
     ))
     conn.commit()
     conn.close()
