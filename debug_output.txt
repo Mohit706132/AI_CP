@@ -1,0 +1,41 @@
+AUTH RADIO BLOCK:
+auth_mode = st.radio("Access Portal", ["🔑 Login", "📝 Register New Account", "🔑 Reset Password"]
+
+ADMIN NAV OPTIONS:
+
+                "UV Spectral Analysis",
+                "Image Analysis",
+                "Model Retraining",
+                "Audit Logs",
+                "User Management & Approvals",
+                "My Profile",
+                "Documentation"
+            
+
+USER NAV OPTIONS:
+
+                "UV Spectral Analysis",
+                "Image Analysis",
+                "My Profile",
+                "Documentation"
+            
+
+MAIN FUNCTION:
+def main():
+    if not st.session_state.get("authenticated", False):
+        render_auth_page()
+    else:
+        page = render_sidebar()
+        if page == "UV Spectral Analysis":
+            render_uv_page()
+        elif page == "Model Retraining":
+            render_retraining_page()
+        elif page == "Image Analysis":
+            render_image_page()
+        elif page == "Audit Logs":
+            render_audit_page()
+        elif page == "User Management & Approvals":
+            render_user_management_page()
+        elif page == "My Profile":
+            render_profile_page()
+        eli

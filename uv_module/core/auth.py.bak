@@ -24,15 +24,6 @@ def _verify_password(password: str, stored_hash: str, salt_hex: str) -> bool:
     return key.hex() == stored_hash
 
 
-def _migrate_add_column(cursor, table: str, column: str, col_type: str, default=None):
-    """Safely adds a column to an existing table (no-op if column already exists)."""
-    try:
-        default_clause = f" DEFAULT '{default}'" if default is not None else ""
-        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
-
 def init_auth_db():
     """Creates the users table and seeds a default admin account if not already present."""
     conn = sqlite3.connect(DB_PATH)
@@ -54,10 +45,6 @@ def init_auth_db():
     ''')
     conn.commit()
 
-    # --- Schema Migrations ---
-    _migrate_add_column(c, "users", "phone", "TEXT")
-    conn.commit()
-
     # Check if admin user exists
     c.execute("SELECT id FROM users WHERE role = 'admin'")
     if not c.fetchone():
@@ -72,7 +59,7 @@ def init_auth_db():
     conn.close()
 
 
-def register_user(username: str, password: str, full_name: str = "", phone: str = "") -> tuple[bool, str]:
+def register_user(username: str, password: str, full_name: str = "") -> tuple[bool, str]:
     """Registers a new user with status 'pending' awaiting Admin approval."""
     username = username.strip().lower()
     if not username or not password:
@@ -94,9 +81,9 @@ def register_user(username: str, password: str, full_name: str = "", phone: str 
 
     try:
         c.execute('''
-            INSERT INTO users (username, full_name, phone, password_hash, salt, role, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'user', 'pending', ?)
-        ''', (username, full_name.strip() or username, phone.strip(), p_hash, salt, now))
+            INSERT INTO users (username, full_name, password_hash, salt, role, status, created_at)
+            VALUES (?, ?, ?, ?, 'user', 'pending', ?)
+        ''', (username, full_name.strip() or username, p_hash, salt, now))
         conn.commit()
         conn.close()
         return True, "Registration submitted successfully! Your account is pending Admin approval."
@@ -166,7 +153,7 @@ def get_all_users() -> list[dict]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT id, username, full_name, phone, role, status, created_at, approved_by, approved_at, last_login FROM users ORDER BY id DESC")
+    c.execute("SELECT id, username, full_name, role, status, created_at, approved_by, approved_at, last_login FROM users ORDER BY id DESC")
     rows = c.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -219,87 +206,3 @@ def delete_user(username: str) -> bool:
     success = c.rowcount > 0
     conn.close()
     return success
-
-
-def update_profile(username: str, full_name: str, phone: str) -> tuple[bool, str, dict | None]:
-    """Updates a user's profile (full_name, phone) and returns the refreshed user dict."""
-    init_auth_db()
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE users SET full_name = ?, phone = ? WHERE username = ?",
-              (full_name.strip(), phone.strip(), username))
-    conn.commit()
-    success = c.rowcount > 0
-    if not success:
-        conn.close()
-        return False, "User not found.", None
-
-    # Return refreshed user dict (without password hash)
-    conn.row_factory = sqlite3.Row
-    c2 = conn.cursor()
-    c2.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = c2.fetchone()
-    conn.close()
-    if user:
-        user_dict = dict(user)
-        del user_dict["password_hash"]
-        del user_dict["salt"]
-        return True, "Profile updated successfully!", user_dict
-    return False, "Could not refresh profile.", None
-
-
-def change_password(username: str, current_password: str, new_password: str) -> tuple[bool, str]:
-    """Changes a user's password after verifying the current password."""
-    if len(new_password) < 4:
-        return False, "New password must be at least 4 characters long."
-
-    init_auth_db()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT password_hash, salt FROM users WHERE username = ?", (username,))
-    user = c.fetchone()
-
-    if not user:
-        conn.close()
-        return False, "User not found."
-
-    user_dict = dict(user)
-    if not _verify_password(current_password, user_dict["password_hash"], user_dict["salt"]):
-        conn.close()
-        return False, "Current password is incorrect."
-
-    p_hash, salt = _hash_password(new_password)
-    c.execute("UPDATE users SET password_hash = ?, salt = ? WHERE username = ?", (p_hash, salt, username))
-    conn.commit()
-    conn.close()
-    return True, "Password changed successfully!"
-
-
-def reset_password(username: str, full_name: str, new_password: str) -> tuple[bool, str]:
-    """Resets a user's password after verifying identity via username + full_name match."""
-    if len(new_password) < 4:
-        return False, "New password must be at least 4 characters long."
-
-    init_auth_db()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT id, full_name FROM users WHERE username = ?", (username.strip().lower(),))
-    user = c.fetchone()
-
-    if not user:
-        conn.close()
-        return False, "No account found with that username."
-
-    stored_name = (user["full_name"] or "").strip().lower()
-    provided_name = full_name.strip().lower()
-    if stored_name != provided_name:
-        conn.close()
-        return False, "Identity verification failed. Full name does not match our records."
-
-    p_hash, salt = _hash_password(new_password)
-    c.execute("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?", (p_hash, salt, user["id"]))
-    conn.commit()
-    conn.close()
-    return True, "Password has been reset successfully! You can now sign in with your new password."

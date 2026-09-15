@@ -1,4 +1,4 @@
-import io
+﻿import io
 # -*- coding: utf-8 -*-
 from pathlib import Path
 import sys
@@ -18,8 +18,7 @@ import uv_module.core.auth
 importlib.reload(uv_module.core.auth)
 from uv_module.core.auth import (
     verify_login, register_user, get_pending_users, approve_user,
-    reject_user, update_user_role, get_all_users, delete_user,
-    update_profile, change_password, reset_password
+    reject_user, update_user_role, get_all_users, delete_user
 )
 from uv_module.core.router import route_and_process
 
@@ -269,7 +268,7 @@ def render_auth_page():
 
     c_left, c_mid, c_right = st.columns([1, 1.4, 1])
     with c_mid:
-        auth_mode = st.radio("Access Portal", ["🔑 Login", "📝 Register New Account", "🔑 Reset Password"], horizontal=True, label_visibility="collapsed")
+        auth_mode = st.radio("Access Portal", ["🔑 Login", "📝 Register New Account"], horizontal=True, label_visibility="collapsed")
         
         if auth_mode == "🔑 Login":
             st.markdown("### User Sign In")
@@ -293,30 +292,6 @@ def render_auth_page():
                         else:
                             st.error(msg)
                             
-
-        elif auth_mode == "🔑 Reset Password":
-            st.markdown("### 🔑 Forgot Password")
-            st.write("Verify your identity using your **username** and **full name** to reset your password.")
-            
-            with st.form("reset_form"):
-                reset_user = st.text_input("Username").strip()
-                reset_name = st.text_input("Full Name (as registered)").strip()
-                reset_pass = st.text_input("New Password", type="password")
-                reset_pass2 = st.text_input("Confirm New Password", type="password")
-                submit_reset = st.form_submit_button("🔑 Reset Password", type="primary", use_container_width=True)
-                
-                if submit_reset:
-                    if not reset_user or not reset_name or not reset_pass:
-                        st.error("All fields are required.")
-                    elif reset_pass != reset_pass2:
-                        st.error("Passwords do not match.")
-                    else:
-                        ok, msg = reset_password(reset_user, reset_name, reset_pass)
-                        if ok:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
-                            
         else:
             st.markdown("### Request System Access")
             st.write("Submit your registration. An Administrator will review and approve your account.")
@@ -324,7 +299,6 @@ def render_auth_page():
             with st.form("register_form"):
                 reg_name = st.text_input("Full Name").strip()
                 reg_user = st.text_input("Desired Username").strip()
-                reg_phone = st.text_input("Phone Number (optional)").strip()
                 reg_pass = st.text_input("Password", type="password")
                 reg_pass2 = st.text_input("Confirm Password", type="password")
                 submit_reg = st.form_submit_button("Submit Access Request", type="primary", use_container_width=True)
@@ -335,7 +309,7 @@ def render_auth_page():
                     elif reg_pass != reg_pass2:
                         st.error("Passwords do not match.")
                     else:
-                        ok, msg = register_user(reg_user, reg_pass, reg_name, reg_phone)
+                        ok, msg = register_user(reg_user, reg_pass, reg_name)
                         if ok:
                             st.success(msg)
                             st.info("Once approved by the Administrator, you will be able to log in.")
@@ -381,31 +355,23 @@ def render_sidebar():
                 "Image Analysis",
                 "Model Retraining",
                 "Audit Logs",
-                "User Management & Approvals",
-                "My Profile",
-                "Documentation"
+                "User Management & Approvals"
             ]
             format_dict = {
                 "UV Spectral Analysis": "🔬 UV Spectral Scan",
                 "Image Analysis": "📸 Plant Image Scan",
                 "Model Retraining": "⚙️ Model Retraining",
                 "Audit Logs": "📜 Security Audit Logs",
-                "User Management & Approvals": "👥 User Management",
-                "My Profile": "👤 My Profile",
-                "Documentation": "📖 Documentation & Help"
+                "User Management & Approvals": "👥 User Management"
             }
         else:
             nav_options = [
                 "UV Spectral Analysis",
-                "Image Analysis",
-                "My Profile",
-                "Documentation"
+                "Image Analysis"
             ]
             format_dict = {
                 "UV Spectral Analysis": "🔬 UV Spectral Scan",
-                "Image Analysis": "📸 Plant Image Scan",
-                "My Profile": "👤 My Profile",
-                "Documentation": "📖 Documentation & Help"
+                "Image Analysis": "📸 Plant Image Scan"
             }
 
         page = st.radio(
@@ -899,270 +865,6 @@ def render_user_management_page():
             st.dataframe(df_users[display_cols], use_container_width=True, hide_index=True)
 
 
-
-def render_profile_page():
-    user = st.session_state.get("user", {})
-    username = user.get("username", "")
-
-    st.markdown("<div class='brand-title'>👤 My Profile</div>", unsafe_allow_html=True)
-    st.markdown("<div class='brand-sub'>View and update your personal information and security settings.</div>", unsafe_allow_html=True)
-
-    col_info, col_edit = st.columns([1, 1.2], gap="large")
-
-    with col_info:
-        st.markdown("### 📇 Account Information")
-        st.markdown(f"""
-<div class='app-card'>
-    <table style='width: 100%; border-collapse: collapse;'>
-        <tr><td style='padding: 8px 0; color: #94a3b8; width: 40%;'>Username</td><td style='padding: 8px 0; font-weight: 600;'>@{user.get('username', 'N/A')}</td></tr>
-        <tr><td style='padding: 8px 0; color: #94a3b8;'>Full Name</td><td style='padding: 8px 0; font-weight: 600;'>{user.get('full_name', 'N/A')}</td></tr>
-        <tr><td style='padding: 8px 0; color: #94a3b8;'>Phone</td><td style='padding: 8px 0; font-weight: 600;'>{user.get('phone', '') or '— Not set'}</td></tr>
-        <tr><td style='padding: 8px 0; color: #94a3b8;'>Role</td><td style='padding: 8px 0; font-weight: 600;'>{'🛡️ Administrator' if user.get('role') == 'admin' else '🔬 Research User'}</td></tr>
-        <tr><td style='padding: 8px 0; color: #94a3b8;'>Member Since</td><td style='padding: 8px 0; font-weight: 600;'>{user.get('created_at', 'N/A')}</td></tr>
-        <tr><td style='padding: 8px 0; color: #94a3b8;'>Last Login</td><td style='padding: 8px 0; font-weight: 600;'>{user.get('last_login', 'N/A')}</td></tr>
-    </table>
-</div>
-""", unsafe_allow_html=True)
-
-    with col_edit:
-        st.markdown("### ✏️ Edit Profile")
-        with st.form("profile_form"):
-            edit_name = st.text_input("Full Name", value=user.get("full_name", ""))
-            edit_phone = st.text_input("Phone Number", value=user.get("phone", "") or "")
-            save_profile = st.form_submit_button("💾 Save Changes", type="primary", use_container_width=True)
-
-            if save_profile:
-                ok, msg, refreshed = update_profile(username, edit_name, edit_phone)
-                if ok and refreshed:
-                    st.session_state["user"] = refreshed
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
-
-        st.markdown("---")
-        st.markdown("### 🔒 Change Password")
-        with st.form("password_form"):
-            cur_pass = st.text_input("Current Password", type="password")
-            new_pass = st.text_input("New Password", type="password")
-            new_pass2 = st.text_input("Confirm New Password", type="password")
-            change_btn = st.form_submit_button("🔄 Update Password", type="primary", use_container_width=True)
-
-            if change_btn:
-                if not cur_pass or not new_pass:
-                    st.error("All password fields are required.")
-                elif new_pass != new_pass2:
-                    st.error("New passwords do not match.")
-                else:
-                    ok, msg = change_password(username, cur_pass, new_pass)
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-
-
-def render_docs_page():
-    st.markdown("<div class='brand-title'>📖 Documentation & User Guide</div>", unsafe_allow_html=True)
-    st.markdown("<div class='brand-sub'>Complete reference for the Integrated Plant Authentication Suite — B.V. Bhide Foundation</div>", unsafe_allow_html=True)
-
-    tab_start, tab_uv, tab_img, tab_retrain, tab_admin, tab_data, tab_faq = st.tabs([
-        "🚀 Getting Started",
-        "📊 UV Analysis",
-        "📷 Image Analysis",
-        "🔄 Retraining",
-        "🛡️ Admin Guide",
-        "📁 Data Format",
-        "❓ FAQ"
-    ])
-
-    with tab_start:
-        st.markdown("""
-### 🚀 Getting Started
-
-Welcome to the **Integrated Plant Authentication Suite**, built for the B.V. Bhide Foundation.
-This platform combines **UV spectral analysis** and **deep learning image classification** to authenticate and classify medicinal plant samples.
-
----
-
-#### 🔑 Account Access Flow
-
-1. **Register** — Click *Register New Account* on the login page. Fill in your name, username, and password.
-2. **Pending Approval** — Your account will be in *pending* status until an Administrator approves it.
-3. **Login** — Once approved, sign in with your credentials to access the suite.
-4. **Forgot Password?** — Use the *Reset Password* tab on the login page. You’ll need your **username** and **full name** (as registered) to verify your identity.
-
-#### 👥 User Roles
-
-| Role | Access |
-|------|--------|
-| **Research User** | UV Spectral Scan, Image Analysis, Profile, Documentation |
-| **Administrator** | All of the above + Model Retraining, Audit Logs, User Management |
-
----
-
-#### 📱 Mobile Access
-The interface is fully responsive. Open the Streamlit URL on any phone or tablet browser for field use.
-""")
-
-    with tab_uv:
-        st.markdown("""
-### 📊 UV Spectral Analysis
-
-Use this module to classify and authenticate plant samples from their UV absorption spectra.
-
----
-
-#### Step-by-Step
-
-1. **Select Target Species** — Choose from:
-   - **Auto-Detect** — Automatically identifies the plant species first, then applies the relevant sub-classifier.
-   - **Rauwolfia/Terminalia** — Classifies between *R. serpentina*, *R. tetraphylla*, *R. densiflora*, and unknown/foreign samples.
-   - **Embelia** — Distinguishes authentic *E. ribes* from adulterants.
-   - **Hirda** — Classifies Terminalia chebula varieties (Rohini, Vijaya, etc.).
-
-2. **Download Template** — Use the provided CSV template for your selected species to ensure correct column formatting.
-
-3. **Upload CSV** — Upload your UV spectral data file. Columns should be wavelengths (220–400nm typically), rows are samples.
-
-4. **View Results** — The system displays:
-   - Per-sample classification with confidence scores
-   - Confusion matrix (if ground truth labels are provided)
-   - Accuracy metrics and detailed classification report
-
-#### 💡 Tips
-- If your CSV has a column named `label`, `species`, `variety`, `ground_truth`, etc., the system auto-detects it as ground truth for accuracy evaluation.
-- Ensure spectral values are **non-zero** in the diagnostic range (220–400nm). All-zero rows will produce unreliable predictions.
-""")
-
-    with tab_img:
-        st.markdown("""
-### 📷 Image Analysis (Deep Learning)
-
-Classify plant leaf images using MobileNetV2-based deep learning models.
-
----
-
-#### Step-by-Step
-
-1. **Upload** an image (JPG, PNG, HEIC) or **capture** a photo using your device camera.
-2. Click **Run Image Analysis**.
-3. The system returns:
-   - **Plant Detection** — Which species was detected, with confidence %.
-   - **Top Prediction** — The most likely sub-classification with description and traditional uses.
-   - **Alternatives** — Other candidate predictions ranked by confidence.
-
-#### 💡 Tips
-- Use well-lit, clear photos of individual leaves for best results.
-- The model supports classification of Hirda, Embelia, and Rauwolfia species.
-- If TensorFlow is not available in the environment, a fallback message will appear.
-""")
-
-    with tab_retrain:
-        st.markdown("""
-### 🔄 Model Retraining (Admin Only)
-
-Retrain the UV classification models with new or updated training data.
-
----
-
-#### How It Works
-
-1. **Backup** — The system automatically backs up the current production models before retraining.
-2. **Staging** — New models are trained into an isolated `models_staging/` directory.
-3. **Comparison** — Cross-validation accuracy of the new model is compared against the current production model.
-4. **Promotion** — Only if the new model is *equal or better*, it gets promoted to production. Otherwise, the old model is kept.
-
-#### Available Retraining Pipelines
-
-| Pipeline | Training Data Source |
-|----------|---------------------|
-| Hirda Variety Classifier | `uv_module/data/` directory |
-| Rauwolfia Species Classifier | `uv_module/data/` directory |
-| Embelia Authenticity Classifier | `uv_module/data/` directory |
-| Plant Detector (Multi-species) | `uv_module/data/` directory + custom CSVs |
-
-#### 💡 Tips
-- The system uses **dynamic K-fold cross-validation** (`min(5, min_samples)`) to handle small datasets.
-- Monitor the confusion matrix and accuracy metrics after retraining to verify improvement.
-""")
-
-    with tab_admin:
-        st.markdown("""
-### 🛡️ Administrator Guide
-
-#### User Management
-- **Pending Approvals** — New user registrations appear here. Approve or reject each request.
-- **Role Assignment** — Promote any approved user to Administrator, or demote back to Research User.
-- **User Directory** — View all registered users with their status, role, and login history.
-
-#### Audit Logs
-- View complete history of UV spectral scans and image analyses performed by all users.
-- Track which user processed which files and when.
-- Monitor for adulteration/outlier detections.
-
-#### Best Practices
-- Review pending user requests regularly.
-- Back up `audit.db` periodically — it contains all user accounts and audit history.
-- Before deploying model updates, verify the staging accuracy metrics.
-""")
-
-    with tab_data:
-        st.markdown("""
-### 📁 Data Format Requirements
-
-#### UV Spectral CSV Files
-
-| Requirement | Details |
-|-------------|---------|
-| **Format** | Standard CSV (comma-separated) |
-| **Columns** | Wavelength values as column headers (e.g., `220`, `221`, ..., `400`) |
-| **Rows** | One row per sample |
-| **Values** | Numeric absorbance readings (float) |
-| **Labels** (optional) | A column named `label`, `species`, `variety`, `ground_truth`, `target`, `class`, `type`, `name`, or `sample` |
-
-#### Example CSV Structure
-
-```
-label,220,221,222,...,399,400
-Rohini,0.453,0.461,0.472,...,0.234,0.228
-Vijaya,0.512,0.498,0.489,...,0.301,0.295
-```
-
-#### ⚠️ Known Data Caveats
-- **All-zero rows**: If a sample has `0.0` across the entire UV spectrum (220–400nm), the classification will be unreliable. This typically indicates a data collection error.
-- **Template columns**: Use the downloadable template for your target species to ensure wavelength columns match the trained model.
-""")
-
-    with tab_faq:
-        st.markdown("""
-### ❓ Frequently Asked Questions
-
----
-
-**Q: I forgot my password. How do I reset it?**
-> Use the *Reset Password* tab on the login page. Enter your username and full name (exactly as registered) to verify your identity, then set a new password.
-
-**Q: My account says "pending". What do I do?**
-> A new account must be approved by an Administrator before you can log in. Contact your admin and ask them to approve your registration.
-
-**Q: The image analysis module shows an error about TensorFlow.**
-> TensorFlow must be installed in the server environment. Contact the system administrator to install it. On some deployment platforms (e.g., Streamlit Cloud), TensorFlow may need to be added to `requirements.txt`.
-
-**Q: My UV spectral prediction seems wrong for some samples.**
-> Check that the spectral data is non-zero in the 220–400nm range. All-zero or near-zero readings produce unreliable results due to lack of diagnostic signal.
-
-**Q: How do I add a new plant species to the system?**
-> This requires adding a new training script, collecting labeled UV spectral data, and training a new model. Contact the development team for guidance.
-
-**Q: Can I use this on my phone?**
-> Yes! The interface is fully responsive. Simply open the app URL in your mobile browser.
-
-**Q: How do I change my name or phone number?**
-> Go to **My Profile** in the sidebar and update your details.
-""")
-
-
-
 def main():
     if not st.session_state.get("authenticated", False):
         render_auth_page()
@@ -1178,10 +880,6 @@ def main():
             render_audit_page()
         elif page == "User Management & Approvals":
             render_user_management_page()
-        elif page == "My Profile":
-            render_profile_page()
-        elif page == "Documentation":
-            render_docs_page()
 
 if __name__ == '__main__':
     main()

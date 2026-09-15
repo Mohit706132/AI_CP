@@ -98,7 +98,16 @@ def train_hirda_model(csv_path, output_models_dir, n_estimators=100, staging_dir
     y_encoded = encoder.fit_transform(labels_raw)
 
     model = RandomForestClassifier(n_estimators=n_estimators, random_state=42, class_weight='balanced')
-    cv_scores = cross_val_score(model, X_pca, y_encoded, cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42))
+    counts = pd.Series(y_encoded).value_counts().tolist()
+    min_count = min(counts) if counts else 0
+    if min_count >= 2:
+        n_splits = min(5, min_count)
+        cv_scores = cross_val_score(model, X_pca, y_encoded, cv=StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42))
+    elif len(y_encoded) >= 2:
+        from sklearn.model_selection import KFold
+        cv_scores = cross_val_score(model, X_pca, y_encoded, cv=KFold(n_splits=min(len(y_encoded), 3), shuffle=True, random_state=42))
+    else:
+        cv_scores = np.array([1.0])
     model.fit(X_pca, y_encoded)
 
     y_pred = model.predict(X_pca)
